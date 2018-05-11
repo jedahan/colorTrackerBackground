@@ -3,6 +3,7 @@
 #include "ofMain.h"
 #include "ofxCv.h"
 #include "ofxOpenCv.h"
+#include "ofxKinect.h"
 #include "ofxGui.h"
 
 class Glow : public ofxCv::RectFollower {
@@ -24,16 +25,16 @@ public:
 
 class ofApp : public ofBaseApp {
 public:
-	void setup();
-	void update();
-	void draw();
+    void setup();
+    void update();
+    void draw();
     void mousePressed(int x, int y, int button);
     void updateColors();
 	
-	ofVideoGrabber cam;
     ofImage flipped;
-	ofxCv::RunningBackground background;
+    ofxCv::RunningBackground background;
     ofImage thresholded;
+    ofxKinect kinect;
 
     int lastIndex = 0;
 

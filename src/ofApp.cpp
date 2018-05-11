@@ -106,12 +106,19 @@ void ofApp::update() {
         
         flipped.setFromPixels(cam.getPixels());
         flipped.mirror(false, true);
-        blur(flipped, 5);
-        background.update(flipped, thresholded);
-        thresholded.update();
+        //background.update(flipped, thresholded);
+        //thresholded.update();
 
         // TODO: see if we can convolute to remove inner holes here?
-        masked.setFromPixels(flipped.getPixels() & thresholded.getPixels());
+	/*
+        masked.setFromPixels(flipped.getPixels());
+        const ofPixels thresholdedPixels = thresholded.getPixels();
+	const int maskedSize = masked.getPixels().size();
+
+	for (int i = 0; i < maskedSize; i++) {
+	    masked.getPixels()[i] &= thresholdedPixels[i/3];
+	}
+	*/
         
         // TODO: checkout nAryMatIterator (p.83)
         for (int i = 0; i < trackers.size(); i++) {
@@ -121,7 +128,7 @@ void ofApp::update() {
             contourFinders[i].setMinAreaRadius(blobMinArea);
             contourFinders[i].setMaxAreaRadius(blobMaxArea);
             contourFinders[i].setThreshold(contourThreshold);
-            contourFinders[i].findContours(masked);
+            contourFinders[i].findContours(flipped);
 
             trackers[i].setPersistence(trackerPersistence);
             trackers[i].setMaximumDistance(trackerMaximumDistance);
@@ -151,9 +158,9 @@ void ofApp::update() {
 }
 
 void ofApp::draw() {
-    masked.draw(0, 0);
-    thresholded.draw(640, 0);
-    cam.draw(1280, 0);
+    //thresholded.draw(640, 0);
+    cam.draw(0, 0);
+    flipped.draw(640, 0);
     
     int j = 0;
     for (ofxCv::RectTrackerFollower<Glow> & tracker : trackers) {
