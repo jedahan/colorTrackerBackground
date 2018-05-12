@@ -1,48 +1,48 @@
+#include "Glow.h"
 #include "ofMain.h"
 #include "ofxCv.h"
-#include "ofxOpenCv.h"
+#include "ofxGui.h"
 #include "ofxKinect.h"
 #include "ofxLivingRoom.h"
-#include "ofxGui.h"
-#include "Glow.h"
+#include "ofxOpenCv.h"
 
 class ofApp : public ofBaseApp {
 public:
-    void setup();
-    void update();
-    void draw();
-    void mousePressed(int x, int y, int button);
-    void keyPressed(int key);
-    void updateColors();
-	
-    ofxKinect kinect;
+  void setup();
+  void update();
+  void draw();
+  void mousePressed(int x, int y, int button);
+  void keyPressed(int key);
+  void updateColors();
 
-    int lastIndex = 0;
+  ofxKinect kinect;
 
-    ofxPanel gui;
-    ofParameter<bool> liveSampling;
-    ofParameter<float> depthMaximum;
-    ofParameter<int> angle;
-    ofParameter<float> hueRange;
-    ofParameter<float> contourThreshold;
-    ofParameter<float> trackerPersistence;
-    ofParameter<float> trackerMaximumDistance;
+  int lastIndex = 0;
 
-    ofParameter<float> blobMinArea, blobMaxArea;
+  ofxPanel gui;
+  ofParameter<bool> liveSampling;
+  ofParameter<float> depthMaximum;
+  ofParameter<int> angle;
+  ofParameter<float> hueRange;
+  ofParameter<float> contourThreshold;
+  ofParameter<float> trackerPersistence;
+  ofParameter<float> trackerMaximumDistance;
 
-    ofParameterGroup depthParameters;
-    ofParameterGroup contourParameters;
-    ofParameterGroup trackerParameters;
-    ofParameterGroup mouseParameters;
-    ofParameterGroup colorParameters;
+  ofParameter<float> blobMinArea, blobMaxArea;
 
-    ofxCvColorImage colorImage;
-    ofxCvGrayscaleImage depthImage;
-    ofxCvGrayscaleImage hue, sat, bri;
-    ofxCvColorImage thresholdedColorImage;
+  ofParameterGroup depthParameters;
+  ofParameterGroup contourParameters;
+  ofParameterGroup trackerParameters;
+  ofParameterGroup mouseParameters;
+  ofParameterGroup colorParameters;
 
-    vector<ofxCv::ContourFinder> contourFinders;
-    vector<ofxCv::RectTrackerFollower<Glow>> trackers;
+  ofxCvColorImage colorImage;
+  ofxCvGrayscaleImage depthImage;
+  ofxCvGrayscaleImage hue, sat, bri;
+  ofxCvColorImage thresholdedColorImage;
 
-    ofxLivingRoom room;
+  vector<ofxCv::ContourFinder> contourFinders;
+  vector<ofxCv::RectTrackerFollower<Glow>> trackers;
+
+  ofxLivingRoom room;
 };
