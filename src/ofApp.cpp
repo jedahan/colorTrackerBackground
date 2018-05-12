@@ -3,132 +3,98 @@
 using namespace ofxCv;
 using namespace cv;
 
-const float dyingTime = 1;
-
-void Glow::setup(const cv::Rect& track) {
-    color.setHsb(ofRandom(0, 255), 255, 255);
-    cur = toOf(track).getCenter();
-    smooth = cur;
-}
-
-void Glow::update(const cv::Rect& track) {
-    cur = toOf(track).getCenter();
-    smooth.interpolate(cur, .5);
-    all.addVertex(smooth.x, smooth.y);
-}
-
-void Glow::kill() {
-    float curTime = ofGetElapsedTimef();
-    if(startedDying == 0) {
-        startedDying = curTime;
-    } else if(curTime - startedDying > dyingTime) {
-        dead = true;
-    }
-}
-
-void Glow::draw() {
-    ofPushStyle();
-    float size = 16;
-    ofSetColor(255);
-    if(startedDying) {
-        ofSetColor(ofColor::red);
-        size = ofMap(ofGetElapsedTimef() - startedDying, 0, dyingTime, size, 0, true);
-    }
-    ofNoFill();
-    ofDrawCircle(cur, size);
-    ofSetColor(color);
-    all.draw();
-    ofSetColor(255);
-    ofDrawBitmapString(ofToString(label), cur);
-    ofPopStyle();
-}
-
 void ofApp::setup() {
-    int width = 640;
-    int height = 480;
-    cam.listDevices();
-    cam.setDeviceID(0);
-    cam.setup(width, height);
-    flipped.allocate(width, height, OF_IMAGE_COLOR);
-    masked.allocate(width, height);
-    
-    backgroundParameters.setName("background");
-    backgroundParameters.add(resetBackground.set("reset", false));
-    backgroundParameters.add(learningTime.set("learning time", 30, 0, 30));
-    backgroundParameters.add(thresholdValue.set("threshold", 30, 0, 255));
+    room.setup();
+    kinect.setRegistration(true);
+    kinect.setDepthClipping(500, 1000); // 50cm to 2m range
+    kinect.init();
+    kinect.open();
+
+    if(kinect.isConnected()) {
+        ofLogNotice() << "sensor-emitter dist: " << kinect.getSensorEmitterDistance() << "cm";
+	ofLogNotice() << "sensor-camera dist:  " << kinect.getSensorCameraDistance() << "cm";
+        ofLogNotice() << "zero plane pixel size: " << kinect.getZeroPlanePixelSize() << "mm";
+        ofLogNotice() << "zero plane dist: " << kinect.getZeroPlaneDistance() << "mm";
+    }
+
+    colorImage.allocate(kinect.width, kinect.height);
+    depthImage.allocate(kinect.width, kinect.height);
+    hue.allocate(kinect.width, kinect.height);
+    sat.allocate(kinect.width, kinect.height);
+    bri.allocate(kinect.width, kinect.height);
+    thresholdedColorImage.allocate(kinect.width, kinect.height);
+
+    depthParameters.setName("depth");
+    depthParameters.add(depthMaximum.set("maximum", 160, 0, 255));
+    depthParameters.add(angle.set("angle", 0, -30, 30));
 
     contourParameters.setName("contours");
-    contourParameters.add(blobMinArea.set("min radius", max(width, height) / 50, 0, max(width, height) / 5));
-    contourParameters.add(blobMaxArea.set("max radius", max(width, height) / 10, 0, max(width, height) / 5));
+    contourParameters.add(blobMinArea.set("min radius", max(kinect.width, kinect.height) / 50, 0, max(kinect.width, kinect.height) / 5));
+    contourParameters.add(blobMaxArea.set("max radius", max(kinect.width, kinect.height) / 10, 0, max(kinect.width, kinect.height) / 5));
     contourParameters.add(contourThreshold.set("threshold", 25, 0, 255));
-    
+
     trackerParameters.setName("tracker");
     trackerParameters.add(trackerPersistence.set("persistence", 15, 0, 600));
-    trackerParameters.add(trackerMaximumDistance.set("maximum distance", 50, 0, width/4));
+    trackerParameters.add(trackerMaximumDistance.set("maximum distance", 50, 0, kinect.width/4));
 
     mouseParameters.setName("mouse");
     colorParameters.setName("colors");
-    for (int i = 0; i < 4; i++) {
-        ofParameter<ofVec2f> mouse = ofVec2f(10 + 64 * i, height - 64);
+    for (unsigned int i = 0; i < 4; i++) {
+        ofParameter<ofDefaultVec2> mouse = ofDefaultVec2(10 + 64 * i, kinect.height - 64);
         mouse.setName(ofToString(i));
         mouseParameters.add(mouse);
-        
+
         ofParameter<ofColor> color = ofColor::fromHsb(32+(i*64), 255, 255);
         color.setName(ofToString(i));
-        colorParameters.add(color);
+	colorParameters.add(color);
 
         ofxCv::ContourFinder contourFinder = ofxCv::ContourFinder();
         contourFinders.push_back(contourFinder);
         ofxCv::RectTrackerFollower<Glow> tracker;
         trackers.push_back(tracker);
     }
-    
+
     colorParameters.add(liveSampling.set("live sampling", false));
     lastIndex = 0;
 
-    gui.setup();
-    gui.add(backgroundParameters);
+    gui.setup("settings", "settings.json", 640 + 64 + (4 * 3), 64 + (4 * 3));
+    gui.add(depthParameters);
     gui.add(mouseParameters);
     gui.add(colorParameters);
     gui.add(contourParameters);
     gui.add(trackerParameters);
+    gui.getGroup("mouse").minimize();
+    gui.getGroup("colors").minimize();
+    gui.loadFromFile("settings.json");
 }
 
 void ofApp::update() {
-    cam.update();
-    if (resetBackground) {
-        background.reset();
-        resetBackground = false;
-    }
-    if(cam.isFrameNew()) {
-        background.setLearningTime(learningTime);
-        background.setThresholdValue(thresholdValue);
-        
-        flipped.setFromPixels(cam.getPixels());
-        flipped.mirror(false, true);
-        //background.update(flipped, thresholded);
-        //thresholded.update();
+    kinect.update();
+    if (kinect.isFrameNew()) {
+	colorImage.setFromPixels(kinect.getPixels());
 
-        // TODO: see if we can convolute to remove inner holes here?
-	/*
-        masked.setFromPixels(flipped.getPixels());
-        const ofPixels thresholdedPixels = thresholded.getPixels();
-	const int maskedSize = masked.getPixels().size();
+        depthImage.setFromPixels(kinect.getDepthPixels());
+	depthImage.threshold(depthMaximum);
 
-	for (int i = 0; i < maskedSize; i++) {
-	    masked.getPixels()[i] &= thresholdedPixels[i/3];
-	}
-	*/
-        
-        // TODO: checkout nAryMatIterator (p.83)
-        for (int i = 0; i < trackers.size(); i++) {
+	// extract the hue
+	colorImage.convertRgbToHsv();
+        colorImage.convertToGrayscalePlanarImages(hue, sat, bri);
+	colorImage.convertHsvToRgb();
+        // mask by the masked mask
+	hue &= depthImage;
+	sat &= depthImage;
+	bri &= depthImage;
+	thresholdedColorImage.setFromGrayscalePlanarImages(hue, sat, bri);
+	thresholdedColorImage.convertHsvToRgb();
+
+        for (unsigned int i = 0; i < trackers.size(); i++) {
             ofColor targetColor = colorParameters.getColor(ofToString(i));
-            
+
             contourFinders[i].setTargetColor(targetColor, TRACK_COLOR_HS);
             contourFinders[i].setMinAreaRadius(blobMinArea);
             contourFinders[i].setMaxAreaRadius(blobMaxArea);
             contourFinders[i].setThreshold(contourThreshold);
-            contourFinders[i].findContours(flipped);
+            contourFinders[i].findContours(thresholdedColorImage);
 
             trackers[i].setPersistence(trackerPersistence);
             trackers[i].setMaximumDistance(trackerMaximumDistance);
@@ -142,64 +108,100 @@ void ofApp::update() {
             }
             trackers[i].track(filteredBoundingRects);
         }
-        if (liveSampling) {
+
+        if (liveSampling.get()) {
             updateColors();
+
+            ofPushStyle();
+            ofSetColor(255);
+
             ofParameterGroup & mouseParameters = ((ofParameterGroup &) gui.getGroup("mouse").getParameter());
-            
-            for (int i = 0; i < mouseParameters.size(); i++) {
-                ofVec2f point = (ofVec2f) mouseParameters.getVec2f(ofToString(i));
-                ofPushStyle();
-                ofSetColor(255);
+            for (unsigned int i = 0; i < mouseParameters.size(); i++) {
+                ofDefaultVec2 point = (ofDefaultVec2) mouseParameters.getVec2f(ofToString(i));
                 ofDrawBitmapString("x", point.x, point.y);
-                ofPopStyle();
             }
+
+	    ofPopStyle();
         }
+
     }
 }
 
 void ofApp::draw() {
-    //thresholded.draw(640, 0);
-    cam.draw(0, 0);
-    flipped.draw(640, 0);
-    
+    colorImage.draw(0, 0);
+    thresholdedColorImage.draw(kinect.width, 0);
+
     int j = 0;
     for (ofxCv::RectTrackerFollower<Glow> & tracker : trackers) {
         //contourFinders[j].draw();
         vector<Glow>& followers = tracker.getFollowers();
-        for(int i = 0; i < followers.size(); i++) {
+        for(unsigned int i = 0; i < followers.size(); i++) {
             followers[i].draw();
         }
         j++;
     }
 
-    for (int i = 0; i < mouseParameters.size(); i++) {
-        ofVec2f point = (ofVec2f) mouseParameters.getVec2f(ofToString(i));
+    for (unsigned int i = 0; i < mouseParameters.size(); i++) {
+        ofDefaultVec2 point = (ofDefaultVec2) mouseParameters.getVec2f(ofToString(i));
         ofDrawBitmapStringHighlight("x", point.x, point.y);
     }
 
+    ofPushMatrix();
+    ofPushStyle();
+    int pad = 3;
+    int width = 64;
+
+    ofTranslate(640, 2 * pad);
+
+    for (unsigned int i = 0; i < colorParameters.size() - 1; i++) {
+        ofColor color = (ofColor) colorParameters.getColor(ofToString(i));
+        ofTranslate(width + (4 * pad), 0);
+        ofFill();
+        ofSetColor(0);
+        ofDrawRectangle(-pad, -pad, width+(2*pad), width+(2*pad));
+        ofSetColor(color);
+        ofDrawRectangle(0, 0, width, width);
+    }
+    ofPopStyle();
+    ofPopMatrix();
+
     gui.draw();
 }
+
 void ofApp::updateColors() {
     ofParameterGroup & mouseParameters = ((ofParameterGroup &) gui.getGroup("mouse").getParameter());
-    
+
     ofParameterGroup & colorParameters = ((ofParameterGroup &) gui.getGroup("colors").getParameter());
-    
-    for (int i = 0; i < mouseParameters.size(); i++) {
-        ofVec2f point = (ofVec2f) mouseParameters.getVec2f(ofToString(i));
-        ofColor color = cam.getPixels().getColor(point.x, point.y);
+
+    for (unsigned int i = 0; i < mouseParameters.size(); i++) {
+        ofDefaultVec2 point = (ofDefaultVec2) mouseParameters.getVec2f(ofToString(i));
+        ofColor color = colorImage.getPixels().getColor(point.x, point.y);
         colorParameters
             .getColor(ofToString(i))
             .set(color);
     }
 }
 
-void ofApp::mousePressed(int x, int y, int button) {
-    if (x < 0 || x > 640 || y < 0 || y > 480) return;
-    
-    ofParameterGroup & mouseParameters = ((ofParameterGroup &) gui.getGroup("mouse").getParameter());
-    
-    mouseParameters.getVec2f(ofToString(lastIndex)) = ofVec2f(x, y);
+void ofApp::keyPressed(int key) {
+  switch (key) {
+    case OF_KEY_UP:
+      angle = min(angle + 1, 30);
+      kinect.setCameraTiltAngle(angle);
+      break;
+    case OF_KEY_DOWN:
+      angle = max(angle - 1, -30);
+      kinect.setCameraTiltAngle(angle);
+      break;
+  }
+}
 
-    lastIndex = (lastIndex + 1) % mouseParameters.size();
-    updateColors();
+void ofApp::mousePressed(int x, int y, int button) {
+    if (x > 0 && x < 640 && y > 0 && y < 480) {
+      ofParameterGroup & mouseParameters = ((ofParameterGroup &) gui.getGroup("mouse").getParameter());
+
+      mouseParameters.getVec2f(ofToString(lastIndex)) = ofDefaultVec2(x, y);
+
+      lastIndex = (lastIndex + 1) % mouseParameters.size();
+      updateColors();
+    }
 }

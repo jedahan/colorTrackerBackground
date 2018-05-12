@@ -1,27 +1,10 @@
-#pragma once
-
 #include "ofMain.h"
 #include "ofxCv.h"
 #include "ofxOpenCv.h"
 #include "ofxKinect.h"
+#include "ofxLivingRoom.h"
 #include "ofxGui.h"
-
-class Glow : public ofxCv::RectFollower {
-protected:
-    ofColor color;
-    ofVec2f cur, smooth;
-    float startedDying;
-    ofPolyline all;
-public:
-    Glow()
-    :startedDying(0) {
-    }
-    void setup(const cv::Rect& track);
-    void update(const cv::Rect& track);
-    void kill();
-    void draw();
-};
-
+#include "Glow.h"
 
 class ofApp : public ofBaseApp {
 public:
@@ -29,28 +12,37 @@ public:
     void update();
     void draw();
     void mousePressed(int x, int y, int button);
+    void keyPressed(int key);
     void updateColors();
 	
-    ofImage flipped;
-    ofxCv::RunningBackground background;
-    ofImage thresholded;
     ofxKinect kinect;
 
     int lastIndex = 0;
 
     ofxPanel gui;
     ofParameter<bool> liveSampling;
-    ofParameter<bool> resetBackground;
-    ofParameter<float> learningTime, thresholdValue, hueRange, contourThreshold, trackerPersistence, trackerMaximumDistance;
+    ofParameter<float> depthMaximum;
+    ofParameter<int> angle;
+    ofParameter<float> hueRange;
+    ofParameter<float> contourThreshold;
+    ofParameter<float> trackerPersistence;
+    ofParameter<float> trackerMaximumDistance;
+
     ofParameter<float> blobMinArea, blobMaxArea;
 
-    ofParameterGroup backgroundParameters;
+    ofParameterGroup depthParameters;
     ofParameterGroup contourParameters;
     ofParameterGroup trackerParameters;
     ofParameterGroup mouseParameters;
     ofParameterGroup colorParameters;
-    
-    ofxCvColorImage masked;
+
+    ofxCvColorImage colorImage;
+    ofxCvGrayscaleImage depthImage;
+    ofxCvGrayscaleImage hue, sat, bri;
+    ofxCvColorImage thresholdedColorImage;
+
     vector<ofxCv::ContourFinder> contourFinders;
     vector<ofxCv::RectTrackerFollower<Glow>> trackers;
+
+    ofxLivingRoom room;
 };
