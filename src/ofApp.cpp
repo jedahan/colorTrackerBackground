@@ -4,9 +4,10 @@ using namespace ofxCv;
 using namespace cv;
 
 void ofApp::setup() {
-  room.setup();
+  ofSetFrameRate(1);
+  room.setup("talon.local");
   kinect.setRegistration(true);
-  kinect.setDepthClipping(500, 1000); // 50cm to 2m range
+  kinect.setDepthClipping(500, 1000); // 50cm to 1m range
   kinect.init();
   kinect.open();
 
@@ -28,17 +29,23 @@ void ofApp::setup() {
   bri.allocate(kinect.width, kinect.height);
   thresholdedColorImage.allocate(kinect.width, kinect.height);
 
+  unsigned int screenSize = max(kinect.width, kinect.height);
+
   depthParameters.setName("depth");
   depthParameters.add(depthMaximum.set("maximum", 160, 0, 255));
   depthParameters.add(angle.set("angle", 0, -30, 30));
 
   contourParameters.setName("contours");
   contourParameters.add(
-      blobMinArea.set("min radius", max(kinect.width, kinect.height) / 50, 0,
-                      max(kinect.width, kinect.height) / 5));
+      blobMinArea.set("min radius",
+                      screenSize / 50,
+                      0, screenSize / 5));
+
   contourParameters.add(
-      blobMaxArea.set("max radius", max(kinect.width, kinect.height) / 10, 0,
-                      max(kinect.width, kinect.height) / 5));
+      blobMaxArea.set("max radius",
+                      screenSize / 10,
+                      0, screenSize / 5));
+
   contourParameters.add(contourThreshold.set("threshold", 25, 0, 255));
 
   trackerParameters.setName("tracker");
@@ -64,10 +71,11 @@ void ofApp::setup() {
     trackers.push_back(tracker);
   }
 
-  colorParameters.add(liveSampling.set("live sampling", false));
   lastIndex = 0;
 
   gui.setup("settings", "settings.json", 640 + 64 + (4 * 3), 64 + (4 * 3));
+  gui.add(sending.set("sending", false));
+  gui.add(liveSampling.set("live sampling", false));
   gui.add(depthParameters);
   gui.add(mouseParameters);
   gui.add(colorParameters);
@@ -76,6 +84,17 @@ void ofApp::setup() {
   gui.getGroup("mouse").minimize();
   gui.getGroup("colors").minimize();
   gui.loadFromFile("settings.json");
+}
+
+// update hue index colors
+void ofApp::sendHues() {
+  if (!sending.get()) return;
+
+  for (unsigned int i = 0; i < colorParameters.size(); i++) {
+    ofColor color = colorParameters.getColor(ofToString(i));
+    std::string fact = "hueIndex " + ofToString(i) + " is " + ofToString(color);
+    room.assertFact(fact);
+  }
 }
 
 void ofApp::update() {
@@ -119,6 +138,24 @@ void ofApp::update() {
       trackers[i].track(filteredBoundingRects);
     }
 
+    if (sending.get()) {
+      for (unsigned int t = 0; t < trackers.size(); t++) {
+        vector<Glow> &followers = trackers[t].getFollowers();
+        std::string hueIndex = ofToString(t);
+
+        for (unsigned int i = 0; i < followers.size(); i++) {
+          int label = followers[i].getLabel();
+          std::string glowId = hueIndex + ofToString(label);
+          ofDefaultVec2 cur = followers[i].cur;
+          float nx = cur.x / kinect.width;
+          float ny = cur.y / kinect.height;
+          std::string position = "(" + ofToString(nx) + ", " + ofToString(ny) + ")";
+          std::string fact = "glow" + glowId + " has hueIndex " + hueIndex + " at " + position;
+          room.assertFact(fact);
+        }
+      }
+    }
+
     if (liveSampling.get()) {
       updateColors();
 
@@ -142,14 +179,11 @@ void ofApp::draw() {
   colorImage.draw(0, 0);
   thresholdedColorImage.draw(kinect.width, 0);
 
-  int j = 0;
   for (ofxCv::RectTrackerFollower<Glow> &tracker : trackers) {
-    // contourFinders[j].draw();
     vector<Glow> &followers = tracker.getFollowers();
     for (unsigned int i = 0; i < followers.size(); i++) {
       followers[i].draw();
     }
-    j++;
   }
 
   for (unsigned int i = 0; i < mouseParameters.size(); i++) {
@@ -165,7 +199,7 @@ void ofApp::draw() {
 
   ofTranslate(640, 2 * pad);
 
-  for (unsigned int i = 0; i < colorParameters.size() - 1; i++) {
+  for (unsigned int i = 0; i < colorParameters.size(); i++) {
     ofColor color = (ofColor)colorParameters.getColor(ofToString(i));
     ofTranslate(width + (4 * pad), 0);
     ofFill();
@@ -214,6 +248,8 @@ void ofApp::mousePressed(int x, int y, int button) {
         ((ofParameterGroup &)gui.getGroup("mouse").getParameter());
 
     mouseParameters.getVec2f(ofToString(lastIndex)) = ofDefaultVec2(x, y);
+
+    sendHues();
 
     lastIndex = (lastIndex + 1) % mouseParameters.size();
     updateColors();

@@ -6,10 +6,10 @@
 class Glow : public ofxCv::RectFollower {
 protected:
     ofColor color;
-    ofVec2f cur, smooth;
     float startedDying;
     ofPolyline all;
 public:
+    ofVec2f cur, smooth;
     Glow()
     :startedDying(0) {
     }

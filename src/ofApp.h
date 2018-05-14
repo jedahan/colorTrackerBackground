@@ -14,6 +14,7 @@ public:
   void mousePressed(int x, int y, int button);
   void keyPressed(int key);
   void updateColors();
+  void sendHues();
 
   ofxKinect kinect;
 
@@ -21,6 +22,7 @@ public:
 
   ofxPanel gui;
   ofParameter<bool> liveSampling;
+  ofParameter<bool> sending;
   ofParameter<float> depthMaximum;
   ofParameter<int> angle;
   ofParameter<float> hueRange;
