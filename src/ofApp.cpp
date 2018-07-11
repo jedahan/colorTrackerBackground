@@ -5,7 +5,7 @@ using namespace cv;
 
 void ofApp::setup() {
   ofSetFrameRate(1);
-  room.setup("talon.local");
+  room.setup();
   kinect.setRegistration(true);
   kinect.setDepthClipping(500, 1000); // 50cm to 1m range
   kinect.init();
